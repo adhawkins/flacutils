@@ -2,6 +2,44 @@
 
 use MP3::Tag;
 
+sub MakeDirTree
+{
+	my $Directory=shift;
+	
+	my @Dirs=split(/\//,$Directory);
+	
+	my $Dir="";
+	for $ThisDir (@Dirs)
+	{
+		$Dir.=$ThisDir."/";
+		mkdir($Dir);
+	}
+}
+	
+sub ParseFile
+{
+	
+	my $File=shift;
+	my $BasePath=shift;
+
+	$BasePath=~s/\+/\\\+/;
+	$BasePath=~s/\$/\\\$/;
+	$BasePath=~s/\^/\\\^/;
+	$BasePath=~s/\!/\\\!/;
+
+	if ($File =~ /${BasePath}\/(.*)\/(.*).flac/)
+	{
+		return ($1,$2);
+	}
+	else 
+	{
+		if ($File =~ /${BasePath}\/(.*).flac/)
+		{
+			return ($BasePath,$1);
+		}
+	}
+}
+
 sub FixName
 {
 	my $Name=shift;
@@ -29,6 +67,8 @@ sub TrackFileName
 
 sub ProcessSingleTrackFlac
 {
+	return;
+	
 	foreach $File (@_)
 	{
 		open METAFLAC,"metaflac --list --block-type=VORBIS_COMMENT \"$File\" |";
@@ -157,38 +197,25 @@ sub ProcessMultiTrackFlac
 		{
 			$Artist="Various Artists";
 		}
+
+		($MP3Dir,$MP3Base)=ParseFile($File,$SourceDir);
+		$MP3Dir=$DestDir."/".$MP3Dir;
 		
-		my $AlbumFile=FixName($Album);
-
-		my $TrackFile=TrackFileName($TrackNumber[$#TrackNumber],$TrackTitle[$#TrackNumber]);
-		if ($DiskNumber)
+		my $TrackFile=$MP3Dir."/".$MP3Base.' - '.$TrackNumber[$#TrackNumber].'.mp3';
+		
+		if (-f "$TrackFile")
 		{
-			$TrackFile=sprintf("%d - %s",$DiskNumber,$TrackFile);
-		}
-
-		if (-f "$DestDir/$Artist/$AlbumFile/$TrackFile")
-		{
-			#print "File $DestDir/$Artist/$AlbumFile/$TrackFile already exists\n";
+			print "File $TrackFile already exists\n";
 		}
 		else
 		{
-			if (!-d $DestDir)
+			if (!-d $MP3Dir)
 			{
-				mkdir ("$DestDir/");
+				MakeDirTree ($MP3Dir);
 			}
 			
-			if (!-d "$DestDir/$Artist")
-			{
-				mkdir ("$DestDir/$Artist");
-			}
-			
-			if (!-d "$DestDir/$Artist/$AlbumFile")
-			{
-				mkdir ("$DestDir/$Artist/$AlbumFile");
-			}
-
 			system "metaflac --export-cuesheet-to=\"$Flac.cue\" \"$Flac\"";
-			my $RetVal=system "cuebreakpoints \"$Flac.cue\" | shntool split -n \"\" -d \"$DestDir/$Artist/$AlbumFile/\" -o cust ext=mp3 \{ lame --quiet --preset fast standard - %f \} \"$Flac\"";
+			my $RetVal=system "cuebreakpoints \"$Flac.cue\" | shntool split -n \"\" -d \"$MP3Dir\" -o cust ext=mp3 \{ lame --quiet --preset fast standard - %f \} \"$Flac\"";
 			unlink "$Flac.cue";
 			
 			if ($RetVal==0)
@@ -197,62 +224,75 @@ sub ProcessMultiTrackFlac
 				{
 					my $Number=$TrackNumber[$count];
 					
-					if ($TrackTitle[$count])
-					{
-						my $ThisTitle=$TrackTitle[$count];
-						my $TrackFile=TrackFileName($Number,$ThisTitle);
-						
-						if ($DiskNumber)
-						{
-							$TrackFile=sprintf("%d - %s",$DiskNumber,$TrackFile);
-						}
-						
-						my $OldFile=sprintf("$DestDir/$Artist/$AlbumFile/%03d.mp3",$count);
-						my $NewFile=sprintf("$DestDir/$Artist/$AlbumFile/%s",$TrackFile);
+	        my $OldFile=sprintf("$MP3Dir/%03d.mp3",$count);
+					my $NewFile=sprintf("$MP3Dir/$MP3Base - %02d.mp3",$Number);
 
-						unlink $NewFile;
-						rename $OldFile,$NewFile;
-						
-						my $mp3=MP3::Tag->new($NewFile);
-						$mp3->get_tags;
-						
-						my $id3=$mp3->new_tag("ID3v2");
-						
-						$id3->add_frame("TIT2",$ThisTitle);
-						$id3->add_frame("TALB",$Album);
-						$id3->add_frame("TRCK",$Number);
-						
-						if ($TrackArtist[$count])
-						{
-							$id3->add_frame("TPE1",$TrackArtist[$count]);
-							$id3->add_frame("TCMP","1");
-						}
-						else
-						{
-							$id3->add_frame("TPE1",$Artist);
-						}
-						
-						if ($Year)
-						{
-							$id3->add_frame("TYER",$Year);
-						}
-
-						if ($Genre)
-						{
-							$id3->add_frame("TCON",$Genre);
-						}
-
-						if ($DiskNumber)
-						{
-							$id3->add_frame("TPOS",$DiskNumber);
-						}
-						$id3->write_tag();
-						$mp3->close();
-					}
+					print "Renaming $OldFile to $NewFile\n";
+					
+					unlink $NewFile;
+					rename $OldFile,$NewFile;
 				}
-				
+
 				unlink  "\"$Flac.cue\"";
 			}
+		}
+		
+		$TrackFile=$MP3Dir."/".$MP3Base.' - '.$TrackNumber[$#TrackNumber].'.mp3';
+		if (-f "$TrackFile")
+		{
+			for (my $count=0;$count<$#TrackNumber+1;$count++)
+			{
+				my $Number=$TrackNumber[$count];
+        my $ThisTitle=$TrackTitle[$count];
+        
+        if ($ThisTitle)
+        {
+					my $NewFile=sprintf("$MP3Dir/$MP3Base - %02d.mp3",$Number);
+	
+					print "Tagging $NewFile\n";
+					
+					my $mp3=MP3::Tag->new($NewFile);
+					$mp3->get_tags;
+					
+					my $id3=$mp3->new_tag("ID3v2");
+					
+					$id3->add_frame("TIT2",$ThisTitle);
+					$id3->add_frame("TALB",$Album);
+					$id3->add_frame("TRCK",$Number);
+					
+					if ($TrackArtist[$count] ne $Artist)
+					{
+						$id3->add_frame("TPE1",$TrackArtist[$count]);
+						$id3->add_frame("TCMP","1");
+					}
+					else
+					{
+						$id3->add_frame("TPE1",$Artist);
+					}
+					
+					if ($Year)
+					{
+						$id3->add_frame("TYER",$Year);
+					}
+		
+					if ($Genre)
+					{
+						$id3->add_frame("TCON",$Genre);
+					}
+	
+					if ($DiskNumber)
+					{
+						$id3->add_frame("TPOS",$DiskNumber);
+					}
+	
+					$id3->write_tag();
+					$mp3->close();
+				}
+			}
+		}
+		else
+		{
+			print "Whoops, $TrackFile doesn't exist\n";
 		}
 	}
 }
@@ -313,8 +353,10 @@ sub ProcessFlac
 
 @Flacs=();
 
-ScanFlacs($ARGV[0]);
+$SourceDir=$ARGV[0];
 $DestDir=$ARGV[1];
+
+ScanFlacs($SourceDir);
 
 foreach $Flac (@Flacs)
 {
