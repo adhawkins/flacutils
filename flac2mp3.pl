@@ -201,14 +201,15 @@ sub ProcessMultiTrackFlac
 		($MP3Dir,$MP3Base)=ParseFile($File,$SourceDir);
 		$MP3Dir=$DestDir."/".$MP3Dir;
 		
-		my $TrackFile=$MP3Dir."/".$MP3Base.' - '.$TrackNumber[$#TrackNumber].'.mp3';
+		my $TrackFile=sprintf("$MP3Dir/$MP3Base - %02d.mp3",$TrackNumber[$#TrackNumber]);
 		
 		if (-f "$TrackFile")
 		{
-			print "File $TrackFile already exists\n";
 		}
 		else
 		{
+			print "File $TrackFile doesn't exist\n";
+			
 			if (!-d $MP3Dir)
 			{
 				MakeDirTree ($MP3Dir);
@@ -237,7 +238,6 @@ sub ProcessMultiTrackFlac
 			}
 		}
 		
-		$TrackFile=$MP3Dir."/".$MP3Base.' - '.$TrackNumber[$#TrackNumber].'.mp3';
 		if (-f "$TrackFile")
 		{
 			for (my $count=0;$count<$#TrackNumber+1;$count++)
@@ -260,7 +260,7 @@ sub ProcessMultiTrackFlac
 					$id3->add_frame("TALB",$Album);
 					$id3->add_frame("TRCK",$Number);
 					
-					if ($TrackArtist[$count] ne $Artist)
+					if ($TrackArtist[$count] && $TrackArtist[$count] ne $Artist)
 					{
 						$id3->add_frame("TPE1",$TrackArtist[$count]);
 						$id3->add_frame("TCMP","1");
