@@ -67,10 +67,12 @@ sub TrackFileName
 
 sub ProcessSingleTrackFlac
 {
-	return;
-	
 	foreach $File (@_)
 	{
+		($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+			$atime,$FlacMTime,$ctime,$blksize,$blocks)
+				= stat($File);
+		
 		open METAFLAC,"metaflac --list --block-type=VORBIS_COMMENT \"$File\" |";
 		
 		my $Album="";
@@ -78,6 +80,9 @@ sub ProcessSingleTrackFlac
 		my $TrackTitle="";
 		my $TrackNumber=0;
 		my $Year="";
+		my $Genre="";
+		my $DiskNumber;
+		my $Created=0;
 		
 		while (<METAFLAC>)
 		{
@@ -92,65 +97,84 @@ sub ProcessSingleTrackFlac
 			$TrackTitle=$1 if /TITLE=(.*)$/;
 			
 			$TrackNumber=$1 if /TRACKNUMBER=(.*)$/;
+
+			$DiskNumber=$1 if /DISCNUMBER=(.*)$/;
+			
+			$Genre=$1 if /GENRE=(.*)$/;
 		}
 		
 		close METAFLAC;
 		
-		my $AlbumFile=FixName($Album);
+		($MP3Dir,$MP3Base)=ParseFile($File,$SourceDir);
+		$MP3Dir=$DestDir."/".$MP3Dir;
+
+		my $TrackFile="$MP3Dir/$MP3Base.mp3";
 		
-		my $TrackFile=TrackFileName($TrackNumber,$TrackTitle);
-		if (-f "$DestDir/$Artist/$AlbumFile/$TrackFile")
+		if (-f "$TrackFile")
 		{
-			#print "File $DestDir/$Artist/$AlbumFile/$TrackFile already exists\n";
+			#print "File $TrackFile already exists\n";
 		}
 		else
 		{
-			if (!-d $DestDir)
+			$Created=1;
+			print "File $TrackFile doesn't exist\n";
+			
+			if (!-d $MP3Dir)
 			{
-				print "Making $DestDir\n";
-				mkdir ("$DestDir/");
+				MakeDirTree ($MP3Dir);
 			}
 			
-			if (!-d "$DestDir/$Artist")
-			{
-				print "Making $DestDir/$Artist\n";
-				mkdir ("$DestDir/$Artist");
-			}
+			my $RetVal=system "flac -d -c \"$File\" | lame --quiet --preset fast standard - \"$TrackFile\"";
+		}
+		
+		if (-f "$TrackFile")
+		{
+			($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+				$atime,$MP3MTime,$ctime,$blksize,$blocks)
+					= stat($TrackFile);
 			
-			if (!-d "$DestDir/$Artist/$AlbumFile")
-			{
-				print "Making $DestDir/$Artist/$AlbumFile\n";
-				mkdir ("$DestDir/$Artist/$AlbumFile");
-			}
 			
-			my $RetVal=system "flac -d -c \"$File\" | lame --quiet --preset fast standard - \"$DestDir/$Artist/$AlbumFile/tmp.mp3\"";
-			if ($RetVal==0)
+			if ($MP3MTime<$FlacMTime || $Created==1)
 			{
-				my $NewFile=sprintf("$DestDir/$Artist/$AlbumFile/%s",TrackFileName($TrackNumber,$TrackTitle));
-				
-				unlink $NewFile;
-				rename "$DestDir/$Artist/$AlbumFile/tmp.mp3",$NewFile;
-				
-				my $mp3=MP3::Tag->new($NewFile);
+				print "Tagging $TrackFile\n";
+						
+				my $mp3=MP3::Tag->new($TrackFile);
 				$mp3->get_tags;
 				
-				$mp3->new_tag("ID3v1");
+	      if (exists $mp3->{ID3v1}) 
+	      {
+					$mp3->{ID3v1}->remove_tag;
+		    }
+		    
+				my $id3=$mp3->new_tag("ID3v2");
 				
-				$id3=$mp3->{ID3v1};
-				
-				$id3->song($TrackTitle);
-				$id3->album($Album);
-				$id3->artist($Artist);
-				$id3->track($TrackNumber);
+				$id3->add_frame("TIT2",$TrackTitle);
+				$id3->add_frame("TALB",$Album);
+				$id3->add_frame("TPE1",$Artist);
+				$id3->add_frame("TRCK",$TrackNumber);
 				
 				if ($Year)
 				{
-					$id3->year($Year);
+					$id3->add_frame("TYER",$Year);
 				}
-				
+	
+				if ($Genre)
+				{
+					$id3->add_frame("TCON",$Genre);
+				}
+	
+				if ($DiskNumber)
+				{
+					$id3->add_frame("TPOS",$DiskNumber);
+				}
+	
 				$id3->write_tag();
 				$mp3->close();
 			}
+		}
+		else
+		{
+			print "Whoops - $TrackFile doesn't exist\n";
 		}
 	}
 }
@@ -159,6 +183,10 @@ sub ProcessMultiTrackFlac
 {
 	foreach $File (@_)
 	{
+		($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+			$atime,$FlacMTime,$ctime,$blksize,$blocks)
+				= stat($File);
+		
 		open METAFLAC,"metaflac --list --block-type=VORBIS_COMMENT \"$File\" |";
 		
 		my $Album="";
@@ -169,6 +197,7 @@ sub ProcessMultiTrackFlac
 		my @TrackTitle;
 		my @TrackNumber;
 		my $DiskNumber;
+		my $Created=0;
 		
 		while (<METAFLAC>)
 		{
@@ -208,6 +237,8 @@ sub ProcessMultiTrackFlac
 		}
 		else
 		{
+			$Created=1;
+			
 			print "File $TrackFile doesn't exist\n";
 			
 			if (!-d $MP3Dir)
@@ -249,44 +280,56 @@ sub ProcessMultiTrackFlac
         {
 					my $NewFile=sprintf("$MP3Dir/$MP3Base - %02d.mp3",$Number);
 	
-					print "Tagging $NewFile\n";
+					($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+						$atime,$MP3MTime,$ctime,$blksize,$blocks)
+							= stat($NewFile);
 					
-					my $mp3=MP3::Tag->new($NewFile);
-					$mp3->get_tags;
-					
-					my $id3=$mp3->new_tag("ID3v2");
-					
-					$id3->add_frame("TIT2",$ThisTitle);
-					$id3->add_frame("TALB",$Album);
-					$id3->add_frame("TRCK",$Number);
-					
-					if ($TrackArtist[$count] && $TrackArtist[$count] ne $Artist)
+					if ($MP3MTime<$FlacMTime || $Created==1)
 					{
-						$id3->add_frame("TPE1",$TrackArtist[$count]);
-						$id3->add_frame("TCMP","1");
-					}
-					else
-					{
-						$id3->add_frame("TPE1",$Artist);
-					}
-					
-					if ($Year)
-					{
-						$id3->add_frame("TYER",$Year);
-					}
+						print "Tagging $NewFile\n";
+						
+						my $mp3=MP3::Tag->new($NewFile);
+						$mp3->get_tags;
+						
+			      if (exists $mp3->{ID3v1}) 
+			      {
+							$mp3->{ID3v1}->remove_tag;
+				    }
+				    
+						my $id3=$mp3->new_tag("ID3v2");
+						
+						$id3->add_frame("TIT2",$ThisTitle);
+						$id3->add_frame("TALB",$Album);
+						$id3->add_frame("TRCK",$Number);
+						
+						if ($TrackArtist[$count] && $TrackArtist[$count] ne $Artist)
+						{
+							$id3->add_frame("TPE1",$TrackArtist[$count]);
+							$id3->add_frame("TCMP","1");
+						}
+						else
+						{
+							$id3->add_frame("TPE1",$Artist);
+						}
+						
+						if ($Year)
+						{
+							$id3->add_frame("TYER",$Year);
+						}
+			
+						if ($Genre)
+						{
+							$id3->add_frame("TCON",$Genre);
+						}
 		
-					if ($Genre)
-					{
-						$id3->add_frame("TCON",$Genre);
+						if ($DiskNumber)
+						{
+							$id3->add_frame("TPOS",$DiskNumber);
+						}
+		
+						$id3->write_tag();
+						$mp3->close();
 					}
-	
-					if ($DiskNumber)
-					{
-						$id3->add_frame("TPOS",$DiskNumber);
-					}
-	
-					$id3->write_tag();
-					$mp3->close();
 				}
 			}
 		}
