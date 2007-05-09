@@ -77,6 +77,7 @@ sub ProcessSingleTrackFlac
 		
 		my $Album="";
 		my $Artist="";
+		my $ArtistSort="";
 		my $TrackTitle="";
 		my $TrackNumber=0;
 		my $Year="";
@@ -93,6 +94,8 @@ sub ProcessSingleTrackFlac
 			$Album=$1 if /ALBUM=(.*)$/;
 			
 			$Artist=$1 if /ARTIST=(.*)$/;
+			
+			$ArtistSort=$1 if /ARTISTSORT=(.*)$/;
 			
 			$TrackTitle=$1 if /TITLE=(.*)$/;
 			
@@ -151,6 +154,12 @@ sub ProcessSingleTrackFlac
 				$id3->add_frame("TIT2",$TrackTitle);
 				$id3->add_frame("TALB",$Album);
 				$id3->add_frame("TPE1",$Artist);
+				
+				if ($ArtistSort)
+				{
+					$id3->add_frame("TSOP",$ArtistSort);
+				}
+					
 				$id3->add_frame("TRCK",$TrackNumber);
 				
 				if ($Year)
@@ -191,9 +200,11 @@ sub ProcessMultiTrackFlac
 		
 		my $Album="";
 		my $Artist="";
+		my $ArtistSort="";
 		my $Year="";
 		my $Genre="";
 		my @TrackArtist;
+		my @TrackArtistSort;
 		my @TrackTitle;
 		my @TrackNumber;
 		my $DiskNumber;
@@ -209,11 +220,15 @@ sub ProcessMultiTrackFlac
 			
 			$Artist=$1 if /ARTIST=(.*)$/;
 			
+			$ArtistSort=$1 if /ARTISTSORT=(.*)$/;
+			
 			$Genre=$1 if /GENRE=(.*)$/;
 			
 			$DiskNumber=$1 if /DISCNUMBER=(.*)$/;
 			
 			$TrackArtist[$1]=$2 if /ARTIST\[(\d*)\]=(.*)$/;
+			
+			$TrackArtistSort[$1]=$2 if /ARTISTSORT\[(\d*)\]=(.*)$/;
 			
 			$TrackTitle[$1]=$2 if /TITLE\[(\d*)\]=(.*)$/;
 			
@@ -305,11 +320,22 @@ sub ProcessMultiTrackFlac
 						if ($TrackArtist[$count] && $TrackArtist[$count] ne $Artist)
 						{
 							$id3->add_frame("TPE1",$TrackArtist[$count]);
+							
+							if ($TrackArtistSort[$count])
+							{
+								$id3->add_frame("TSOP",$TrackArtistSort[$count]);
+							}
+								
 							$id3->add_frame("TCMP","1");
 						}
 						else
 						{
 							$id3->add_frame("TPE1",$Artist);
+
+							if ($ArtistSort)
+							{
+								$id3->add_frame("TSOP",$ArtistSort);
+							}
 						}
 						
 						if ($Year)
