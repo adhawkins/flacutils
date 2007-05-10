@@ -87,7 +87,7 @@ sub ProcessSingleTrackFlac
 		
 		foreach $framename  (keys %$srcframes)
 		{
-			if ($framename ne "COVERART")
+			if ($framename ne "COVERART" && $framename ne "VENDOR")
 			{
 				$GlobalTags{$framename}=$srcframes->{$framename};
 			}
@@ -165,7 +165,7 @@ sub ProcessMultiTrackFlac
 		
 		foreach $framename  (keys %$srcframes)
 		{
-			if ($framename ne "COVERART")
+			if ($framename ne "COVERART" && $framename ne "VENDOR")
 			{
 				if ($framename=~/(.*)\[(.*)\]/)
 				{
