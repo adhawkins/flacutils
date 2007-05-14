@@ -1,7 +1,18 @@
 #!/usr/bin/perl -w
 
 use Audio::FLAC::Header;
-use Ogg::Vorbis::Header;
+use Audio::TagLib;
+
+sub RemoveReplayGain
+{
+	foreach $ogg (@_)
+	{
+		$ogg->tag()->removeField(Audio::TagLib::String->new("REPLAYGAIN_ALBUM_GAIN","Latin1"));
+		$ogg->tag()->removeField(Audio::TagLib::String->new("REPLAYGAIN_ALBUM_PEAK","Latin1"));
+		$ogg->tag()->removeField(Audio::TagLib::String->new("REPLAYGAIN_TRACK_GAIN","Latin1"));
+		$ogg->tag()->removeField(Audio::TagLib::String->new("REPLAYGAIN_TRACK_PEAK","Latin1"));
+	}
+}
 
 sub MakeDirTree
 {
@@ -19,7 +30,6 @@ sub MakeDirTree
 	
 sub ParseFile
 {
-	
 	my $File=shift;
 	my $BasePath=shift;
 
@@ -85,11 +95,18 @@ sub ProcessSingleTrackFlac
 				
 		my %GlobalTags;
 		
-		foreach $framename  (keys %$srcframes)
+		foreach $framename (keys %$srcframes)
 		{
 			if ($framename ne "COVERART" && $framename ne "VENDOR")
 			{
-				$GlobalTags{$framename}=$srcframes->{$framename};
+				if ($framename=~/REPLAYGAIN/)
+				{
+					#print "Ignoring $framename\n";
+				}
+				else
+				{
+					$GlobalTags{$framename}=$srcframes->{$framename};
+				}
 			}
 		}
 
@@ -127,15 +144,18 @@ sub ProcessSingleTrackFlac
 			{
 				print "Tagging $TrackFile\n";
 						
-				my $ogg = Ogg::Vorbis::Header->new($TrackFile);
-				$ogg->clear_comments();
-
+				my $ogg = Audio::TagLib::Ogg::Vorbis::File->new($TrackFile);
+				
+				RemoveReplayGain($ogg);
+				
 				foreach $GlobalTag (keys %GlobalTags)
 				{
-					$ogg->add_comments($GlobalTag,$GlobalTags{$GlobalTag});
+					$Name = Audio::TagLib::String->new($GlobalTag,"Latin1");
+					$Value = Audio::TagLib::String->new($GlobalTags{$GlobalTag},"UTF8");
+					$ogg->tag()->addField($Name,$Value);
 				}
 		
-				$ogg->write_vorbis();
+				$ogg->save();
 			}
 		}
 		else
@@ -167,22 +187,36 @@ sub ProcessMultiTrackFlac
 		{
 			if ($framename ne "COVERART" && $framename ne "VENDOR")
 			{
-				if ($framename=~/(.*)\[(.*)\]/)
+				if ($framename=~/REPLAYGAIN/)
 				{
-					if ($2>$MaxTrack)
-					{
-						$MaxTrack=$2;
-					}
-				
-					$TrackTags[$2]{$1}=$srcframes->{$framename};
+					#print "Ignoring $framename\n";
 				}
 				else
 				{
-					$GlobalTags{$framename}=$srcframes->{$framename};
+					if ($framename=~/(.*)\[(.*)\]/)
+					{
+						if ($2>$MaxTrack)
+						{
+							$MaxTrack=$2;
+						}
+					
+						$TrackTags[$2]{$1}=$srcframes->{$framename};
+					}
+					else
+					{
+						$GlobalTags{$framename}=$srcframes->{$framename};
+					}
 				}
 			}
 		}
 
+		#foreach $tag (keys %GlobalTags)
+		#{
+		#	print "'" . $tag . "' is '" . $GlobalTags{$tag} . "'\n";
+		#}
+		
+		#next;
+		
 		($MP3Dir,$MP3Base)=ParseFile($File,$SourceDir);
 		$MP3Dir=$DestDir."/".$MP3Dir;
 		
@@ -236,12 +270,15 @@ sub ProcessMultiTrackFlac
 				{
 					print "Tagging $NewFile\n";
 					
-					my $ogg = Ogg::Vorbis::Header->new($NewFile);
-					$ogg->clear_comments();
+					my $ogg = Audio::TagLib::Ogg::Vorbis::File->new($NewFile);
+
+					RemoveReplayGain($ogg);					
 
 					foreach $TrackTag (keys %{$TrackTags[$Track]})
 					{
-						$ogg->add_comments($TrackTag,$TrackTags[$Track]{$TrackTag});
+						$Name = Audio::TagLib::String->new($TrackTag,"Latin1");
+						$Value = Audio::TagLib::String->new($TrackTags[$Track]{$TrackTag},"UTF8");
+						$ogg->tag()->addField($Name,$Value);
 					}
 
 					foreach $GlobalTag (keys %GlobalTags)
@@ -252,11 +289,13 @@ sub ProcessMultiTrackFlac
 						}
 						else
 						{
-							$ogg->add_comments($GlobalTag,$GlobalTags{$GlobalTag});
+							$Name = Audio::TagLib::String->new($GlobalTag,"Latin1");
+							$Value = Audio::TagLib::String->new($GlobalTags{$GlobalTag},"UTF8");
+							$ogg->tag()->addField($Name,$Value);
 						}
 					}
 			
-					$ogg->write_vorbis();
+					$ogg->save();
 				}
 			}
 		}
