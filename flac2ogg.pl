@@ -237,7 +237,7 @@ sub ProcessMultiTrackFlac
 			}
 			
 			system "metaflac --export-cuesheet-to=\"$Flac.cue\" \"$Flac\"";
-			my $RetVal=system "cuebreakpoints \"$Flac.cue\" | shntool split -n \"\" -d \"$MP3Dir\" -o cust ext=ogg \{ oggenc -q 5 -o %f - \}  \"$Flac\"";
+			my $RetVal=system "cuebreakpoints \"$Flac.cue\" 2>/dev/null | shntool split -n \"\" -d \"$MP3Dir\" -o cust ext=ogg \{ oggenc -q 5 -o %f - \}  \"$Flac\"";
 			#my $RetVal=system "cuebreakpoints \"$Flac.cue\" | shntool split -n \"\" -d \"$MP3Dir\" -o cust ext=mp3 \{ lame --quiet --preset fast standard - %f \} \"$Flac\"";
 			unlink "$Flac.cue";
 			
@@ -369,7 +369,9 @@ ScanFlacs($SourceDir);
 
 $Count=1;
 
-foreach $Flac (@Flacs)
+@Sorted=sort(@Flacs);
+
+foreach $Flac (@Sorted)
 {
 	print $Count;
 	print " of ";
