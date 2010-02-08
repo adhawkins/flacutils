@@ -9,11 +9,11 @@ import re
 def ProcessSingleTrackFlac(basedir,file,destdir):
 	FullPath=os.path.join(basedir,file)
 		
-	FlacMetadata=mutagen.flac.Open(FullPath)
-
 	MaxTrack=0
 	GlobalTags={}
 			
+	FlacMetadata=mutagen.flac.Open(FullPath)
+
 	for key in FlacMetadata.keys():
 		if key!= "coverart" and key != "vendor":
 			if not key.startswith("replaygain"):
@@ -41,15 +41,17 @@ def ProcessSingleTrackFlac(basedir,file,destdir):
 	else:
 		print "Whoops - " + TrackFile + "doesn't exist"
 	
+	os.system("metaflac --export-picture-to=\"" + os.path.join(MP3Dir,"Cover.jpg") + "\" \"" + FullPath + "\"")
+
 def ProcessMultiTrackFlac(basedir,file,destdir):
 	FullPath=os.path.join(basedir,file)
-		
-	FlacMetadata=mutagen.flac.Open(FullPath)
 		
 	MaxTrack=0
 	GlobalTags={}
 	TrackTags={}
 	
+	FlacMetadata=mutagen.flac.Open(FullPath)
+		
 	for key in FlacMetadata.keys():
 		if key!="coverart" and key!="vendor":
 			if not key.startswith("replaygain"):
@@ -113,6 +115,8 @@ def ProcessMultiTrackFlac(basedir,file,destdir):
 		if RequiredFileTags != ActualFileTags:
 			print "Tagging " + TrackFile
 			WriteOggTags(TrackFile,RequiredFileTags)
+
+	os.system("metaflac --export-picture-to=\"" + os.path.join(MP3Dir,"Cover.jpg") + "\" \"" + FullPath + "\"")
 
 def WriteOggTags(file,tags):
 	metadata = mutagen.oggvorbis.Open(file)
