@@ -5,6 +5,37 @@ import os
 import mutagen.flac
 import mutagen.oggvorbis
 import re
+import shutil
+import filecmp
+
+def ExtractCoverArt(FlacFile,MP3Dir):
+	CoverArt=os.path.join(os.path.dirname(FlacFile),"cover.jpg")
+	print "Cover art is " + CoverArt
+
+	DestFile=os.path.join(MP3Dir,"Cover.jpg")
+	
+	if os.path.exists(CoverArt):
+		if os.path.ctime(CoverArt) > os.path.ctime(DestFile):
+			print "Copying cover art file"
+			shutil.copyfile(CoverArt,DestFile)
+		else:
+			print "Cover art hasn't changed"
+	else:
+		TmpFile=os.path.join(os.path.dirname(FlacFile),"tmpcover.jpg")
+		
+		print "Extracting cover art from FLAC to " + TmpFile
+		os.system("metaflac --export-picture-to=\"" + TmpFile + "\" \"" + FlacFile + "\"")
+		
+		if os.path.exists(TmpFile):
+			if not os.path.exists(DestFile) or not filecmp.cmp(TmpFile,DestFile):
+				print "Copying extracted cover art file"
+				shutil.copyfile(TmpFile,DestFile)
+			else:
+				print "Extracted cover art matches the one already there"
+				
+			os.unlink(TmpFile)					
+		else:
+			print TmpFile + " doesn't exist after extraction"
 
 def ProcessSingleTrackFlac(basedir,file,destdir):
 	FullPath=os.path.join(basedir,file)
@@ -40,8 +71,8 @@ def ProcessSingleTrackFlac(basedir,file,destdir):
 			WriteOggTags(TrackFile,GlobalTags)
 	else:
 		print "Whoops - " + TrackFile + "doesn't exist"
-	
-	os.system("metaflac --export-picture-to=\"" + os.path.join(MP3Dir,"Cover.jpg") + "\" \"" + FullPath + "\"")
+
+	ExtractCoverArt(FullPath,MP3Dir)
 
 def ProcessMultiTrackFlac(basedir,file,destdir):
 	FullPath=os.path.join(basedir,file)
@@ -116,7 +147,7 @@ def ProcessMultiTrackFlac(basedir,file,destdir):
 			print "Tagging " + TrackFile
 			WriteOggTags(TrackFile,RequiredFileTags)
 
-	os.system("metaflac --export-picture-to=\"" + os.path.join(MP3Dir,"Cover.jpg") + "\" \"" + FullPath + "\"")
+	ExtractCoverArt(FullPath,MP3Dir)
 
 def WriteOggTags(file,tags):
 	metadata = mutagen.oggvorbis.Open(file)
